@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "dgSpecHash": "E5hrsP/2gWc=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Pc\\source\\repos\\KenzanMSG\\KenzanMSG\\KenzanMSG.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Pc\\.nuget\\packages\\system.text.encoding.codepages\\10.0.14\\system.text.encoding.codepages.10.0.14.nupkg.sha512",
+    "C:\\Users\\Pc\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.33\\microsoft.windowsdesktop.app.ref.8.0.33.nupkg.sha512",
+    "C:\\Users\\Pc\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.33\\microsoft.netcore.app.ref.8.0.33.nupkg.sha512",
+    "C:\\Users\\Pc\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.33\\microsoft.aspnetcore.app.ref.8.0.33.nupkg.sha512",
+    "C:\\Users\\Pc\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\8.0.33\\microsoft.netcore.app.host.win-x64.8.0.33.nupkg.sha512"
+  ],
+  "logs": []
+}
