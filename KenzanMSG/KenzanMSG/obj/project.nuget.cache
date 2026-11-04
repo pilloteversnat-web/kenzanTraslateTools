@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "E5hrsP/2gWc=",
+  "dgSpecHash": "li5GnXrECxM=",
   "success": true,
-  "projectFilePath": "C:\\Users\\Pc\\source\\repos\\KenzanMSG\\KenzanMSG\\KenzanMSG.csproj",
+  "projectFilePath": "C:\\Users\\Pc\\Documents\\GitHub\\kenzanTraslateTools\\KenzanMSG\\KenzanMSG\\KenzanMSG.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Pc\\.nuget\\packages\\system.text.encoding.codepages\\10.0.14\\system.text.encoding.codepages.10.0.14.nupkg.sha512",
     "C:\\Users\\Pc\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.33\\microsoft.windowsdesktop.app.ref.8.0.33.nupkg.sha512",

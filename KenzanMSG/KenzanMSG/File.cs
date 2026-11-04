@@ -165,6 +165,8 @@ namespace KenzanMSG
             return BitConverter.ToUInt16(bytes, 0);
         }
 
+
+
         public void RebuildWithSubtitles(string outputFolder, List<Subtitle> subtitles)
         {
             var outputPath = System.IO.Path.Combine(outputFolder, System.IO.Path.GetFileName(Path));
@@ -176,6 +178,7 @@ namespace KenzanMSG
                 return;
             }
 
+            // Leemos todos los bytes del archivo original para mantener cabeceras y estructuras intactas
             byte[] fileBytes = System.IO.File.ReadAllBytes(Path);
             bool modified = false;
 
@@ -184,32 +187,41 @@ namespace KenzanMSG
                 if (!string.IsNullOrEmpty(sub.Translation) && sub.Offset > 0 && sub.Offset < fileBytes.Length)
                 {
                     byte[] encodedBytes = FileEncoding.GetBytes(sub.Translation);
-                    int maxAvailableSpace = 0;
 
+                    // 1. Calculamos el espacio exacto disponible midiendo estrictamente hasta el siguiente byte nulo (0x00)
+                    int originalAllocatedSpace = 0;
                     for (long i = sub.Offset; i < fileBytes.Length; i++)
                     {
                         if (fileBytes[i] == 0x00) break;
-                        maxAvailableSpace++;
+                        originalAllocatedSpace++;
                     }
-                    maxAvailableSpace++;
 
-                    if (encodedBytes.Length <= maxAvailableSpace)
+                    // Incluimos el terminador nulo original en el conteo de espacio disponible
+                    int totalAvailableBytes = originalAllocatedSpace + 1;
+
+                    if (encodedBytes.Length <= totalAvailableBytes)
                     {
-                        Array.Clear(fileBytes, (int)sub.Offset, maxAvailableSpace);
+                        // CASO A: La traducción es más corta o igual. 
+                        // Borramos con ceros (0x00) todo el espacio previo y escribimos la nueva traducción, 
+                        // garantizando que los códigos de control posteriores queden perfectamente intactos.
+                        Array.Clear(fileBytes, (int)sub.Offset, totalAvailableBytes);
                         Array.Copy(encodedBytes, 0, fileBytes, (int)sub.Offset, encodedBytes.Length);
-                        fileBytes[(int)sub.Offset + encodedBytes.Length] = 0x00;
+                        fileBytes[(int)sub.Offset + encodedBytes.Length] = 0x00; // Asegurar terminador nulo
                         modified = true;
                     }
                     else
                     {
-                        int safeLen = Math.Min(encodedBytes.Length, maxAvailableSpace - 1);
-                        Array.Copy(encodedBytes, 0, fileBytes, (int)sub.Offset, safeLen);
-                        fileBytes[(int)sub.Offset + safeLen] = 0x00;
+                        // CASO B: La traducción es más larga que el espacio reservado original.
+                        // Truncamos de manera segura al máximo espacio disponible menos 1 para no pisar las etiquetas.
+                        int safeLength = totalAvailableBytes - 1;
+                        Array.Copy(encodedBytes, 0, fileBytes, (int)sub.Offset, safeLength);
+                        fileBytes[(int)sub.Offset + safeLength] = 0x00; // Asegurar terminador nulo
                         modified = true;
                     }
                 }
             }
 
+            // Guardamos el archivo .msg perfectamente sincronizado
             System.IO.File.WriteAllBytes(outputPath, fileBytes);
         }
 
