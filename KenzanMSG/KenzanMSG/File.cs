@@ -178,50 +178,66 @@ namespace KenzanMSG
                 return;
             }
 
-            // Leemos todos los bytes del archivo original para mantener cabeceras y estructuras intactas
-            byte[] fileBytes = System.IO.File.ReadAllBytes(Path);
-            bool modified = false;
+            // Copiamos el archivo original intacto para conservar el 100% de la cabecera, cámaras y punteros
+            System.IO.File.Copy(Path, outputPath, true);
+            byte[] fileBytes = System.IO.File.ReadAllBytes(outputPath);
 
             foreach (var sub in subtitles)
             {
-                if (!string.IsNullOrEmpty(sub.Translation) && sub.Offset > 0 && sub.Offset < fileBytes.Length)
+                // Solo procedemos si hay una traducción válida y el offset está dentro del rango seguro (después de la cabecera, ej. > 0x100)
+                if (!string.IsNullOrEmpty(sub.Translation) && sub.Text != sub.Translation && sub.Offset > 0x50 && sub.Offset < fileBytes.Length)
                 {
-                    byte[] encodedBytes = FileEncoding.GetBytes(sub.Translation);
+                    byte[] oldBytes = FileEncoding.GetBytes(sub.Text);
+                    byte[] newBytes = FileEncoding.GetBytes(sub.Translation);
 
-                    // 1. Calculamos el espacio exacto disponible midiendo estrictamente hasta el siguiente byte nulo (0x00)
-                    int originalAllocatedSpace = 0;
-                    for (long i = sub.Offset; i < fileBytes.Length; i++)
+                    // Verificamos que en el offset indicado realmente exista el texto original para evitar reemplazar otra cosa
+                    bool match = true;
+                    if (sub.Offset + oldBytes.Length <= fileBytes.Length)
                     {
-                        if (fileBytes[i] == 0x00) break;
-                        originalAllocatedSpace++;
-                    }
-
-                    // Incluimos el terminador nulo original en el conteo de espacio disponible
-                    int totalAvailableBytes = originalAllocatedSpace + 1;
-
-                    if (encodedBytes.Length <= totalAvailableBytes)
-                    {
-                        // CASO A: La traducción es más corta o igual. 
-                        // Borramos con ceros (0x00) todo el espacio previo y escribimos la nueva traducción, 
-                        // garantizando que los códigos de control posteriores queden perfectamente intactos.
-                        Array.Clear(fileBytes, (int)sub.Offset, totalAvailableBytes);
-                        Array.Copy(encodedBytes, 0, fileBytes, (int)sub.Offset, encodedBytes.Length);
-                        fileBytes[(int)sub.Offset + encodedBytes.Length] = 0x00; // Asegurar terminador nulo
-                        modified = true;
+                        for (int i = 0; i < oldBytes.Length; i++)
+                        {
+                            if (fileBytes[sub.Offset + i] != oldBytes[i])
+                            {
+                                match = false;
+                                break;
+                            }
+                        }
                     }
                     else
                     {
-                        // CASO B: La traducción es más larga que el espacio reservado original.
-                        // Truncamos de manera segura al máximo espacio disponible menos 1 para no pisar las etiquetas.
-                        int safeLength = totalAvailableBytes - 1;
-                        Array.Copy(encodedBytes, 0, fileBytes, (int)sub.Offset, safeLength);
-                        fileBytes[(int)sub.Offset + safeLength] = 0x00; // Asegurar terminador nulo
-                        modified = true;
+                        match = false;
+                    }
+
+                    if (match)
+                    {
+                        // Calculamos el espacio disponible medido hasta el terminador nulo (0x00)
+                        int maxSpace = 0;
+                        for (long i = sub.Offset; i < fileBytes.Length; i++)
+                        {
+                            if (fileBytes[i] == 0x00) break;
+                            maxSpace++;
+                        }
+                        int totalAllowed = maxSpace + 1;
+
+                        if (newBytes.Length <= totalAllowed)
+                        {
+                            // Reemplazo limpio: borramos con ceros el espacio exacto del string y ponemos el nuevo texto
+                            Array.Clear(fileBytes, (int)sub.Offset, totalAllowed);
+                            Array.Copy(newBytes, 0, fileBytes, (int)sub.Offset, newBytes.Length);
+                            fileBytes[(int)sub.Offset + newBytes.Length] = 0x00; // Terminador nulo
+                        }
+                        else
+                        {
+                            // Si el texto nuevo es más largo, truncamos de forma segura para no pisar datos adyacentes
+                            int safeLen = totalAllowed - 1;
+                            Array.Copy(newBytes, 0, fileBytes, (int)sub.Offset, safeLen);
+                            fileBytes[(int)sub.Offset + safeLen] = 0x00;
+                        }
                     }
                 }
             }
 
-            // Guardamos el archivo .msg perfectamente sincronizado
+            // Guardamos el archivo con las cámaras y cabeceras 100% vírgenes e intactas
             System.IO.File.WriteAllBytes(outputPath, fileBytes);
         }
 
