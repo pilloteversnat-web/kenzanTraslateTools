@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("KenzanMSG")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+16977152a0ff4c2067f636ce8c1e380549d6153b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e447b1aee5c72a5f845474f3b5f941483694f824")]
 [assembly: System.Reflection.AssemblyProductAttribute("KenzanMSG")]
 [assembly: System.Reflection.AssemblyTitleAttribute("KenzanMSG")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
