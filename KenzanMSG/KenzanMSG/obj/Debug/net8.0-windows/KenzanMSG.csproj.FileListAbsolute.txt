@@ -45,3 +45,4 @@ C:\Users\Pc\Documents\GitHub\kenzanTraslateTools\KenzanMSG\KenzanMSG\obj\Debug\n
 C:\Users\Pc\Documents\GitHub\kenzanTraslateTools\KenzanMSG\KenzanMSG\obj\Debug\net8.0-windows\KenzanMSG.pdb
 C:\Users\Pc\Documents\GitHub\kenzanTraslateTools\KenzanMSG\KenzanMSG\obj\Debug\net8.0-windows\KenzanMSG.genruntimeconfig.cache
 C:\Users\Pc\Documents\GitHub\kenzanTraslateTools\KenzanMSG\KenzanMSG\obj\Debug\net8.0-windows\ref\KenzanMSG.dll
+C:\Users\Pc\Documents\GitHub\kenzanTraslateTools\KenzanMSG\KenzanMSG\obj\Debug\net8.0-windows\KenzanMSG_Content.g.cs

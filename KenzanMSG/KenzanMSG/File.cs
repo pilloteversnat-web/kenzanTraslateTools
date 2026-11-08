@@ -204,6 +204,7 @@ namespace KenzanMSG
             }
             System.IO.File.Move(tempPath, outputPath);
         }
+        
 
         private ushort ReadUInt16BigEndian(BinaryReader reader)
         {
