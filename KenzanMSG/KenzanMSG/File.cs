@@ -128,74 +128,90 @@ namespace KenzanMSG
                 return;
             }
 
-            // Copiamos el archivo original para preservar intactas la cabecera, cámaras y estructuras globales
-            System.IO.File.Copy(Path, outputPath, true);
-            byte[] fileBytes = System.IO.File.ReadAllBytes(outputPath);
-
-            // Reemplazo seguro string por string, actualizando longitud y rellenando con ceros estrictamente en su bloque
-            foreach (var sub in subtitles)
+            byte[] originalBytes;
+            using (var fs = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
-                if (!string.IsNullOrEmpty(sub.Translation) && sub.Text != sub.Translation && sub.Offset >= 0x200 && sub.Offset < fileBytes.Length)
+                originalBytes = new byte[fs.Length];
+                fs.Read(originalBytes, 0, (int)fs.Length);
+            }
+
+            // 1. Localizamos dónde empiezan los datos de texto reales (por defecto a partir de 0x200 o buscando el primer offset mínimo)
+            int dataStartOffset = 0x200;
+
+            // Copiamos la cabecera estructural intacta
+            var newFileStream = new MemoryStream();
+            newFileStream.Write(originalBytes, 0, dataStartOffset);
+
+            // Ordenamos los subtítulos por su aparición original
+            var sortedSubtitles = subtitles.Where(s => s.Offset >= 0x200).OrderBy(s => s.Offset).ToList();
+
+            // Diccionario para mapear el offset viejo con el nuevo offset recalculado
+            var offsetMapping = new Dictionary<long, int>();
+
+            // 2. Escribimos cada texto traducido de forma consecutiva y guardamos su nueva posición
+            foreach (var sub in sortedSubtitles)
+            {
+                string textToUse = !string.IsNullOrEmpty(sub.Translation) ? sub.Translation : sub.Text;
+                byte[] textBytes = FileEncoding.GetBytes(textToUse);
+
+                int newOffset = (int)newFileStream.Position;
+                offsetMapping[sub.Offset] = newOffset;
+
+                newFileStream.Write(textBytes, 0, textBytes.Length);
+                newFileStream.WriteByte(0x00); // Terminador nulo obligatorio entre cadenas
+            }
+
+            // Alineación múltiplo de 4 bytes al final del archivo (común en motores de PS3)
+            while (newFileStream.Length % 4 != 0)
+            {
+                newFileStream.WriteByte(0x00);
+            }
+
+            byte[] rebuiltBytes = newFileStream.ToArray();
+
+            // 3. Reconstruimos y actualizamos la tabla de punteros de la cabecera (Big-Endian)
+            for (long p = 0x18; p < dataStartOffset - 4; p += 4)
+            {
+                int oldPointerVal = ReadInt32BigEndianAt(originalBytes, (int)p);
+
+                // Si este puntero apuntaba a uno de nuestros strings, lo actualizamos con su nueva dirección
+                if (offsetMapping.ContainsKey(oldPointerVal))
                 {
-                    byte[] oldBytes = FileEncoding.GetBytes(sub.Text);
-                    byte[] newBytes = FileEncoding.GetBytes(sub.Translation);
-
-                    // Validamos que el texto original coincida en el offset
-                    bool match = true;
-                    if (sub.Offset + oldBytes.Length <= fileBytes.Length)
-                    {
-                        for (int i = 0; i < oldBytes.Length; i++)
-                        {
-                            if (fileBytes[sub.Offset + i] != oldBytes[i])
-                            {
-                                match = false;
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        match = false;
-                    }
-
-                    if (match)
-                    {
-                        // Medimos el espacio total asignado en este bloque hasta el siguiente nulo o etiqueta de control
-                        int maxSpace = 0;
-                        for (long i = sub.Offset; i < fileBytes.Length; i++)
-                        {
-                            if (fileBytes[i] == 0x00) break;
-                            maxSpace++;
-                        }
-                        int totalAllowed = maxSpace + 1;
-
-                        // Si la traducción cabe dentro del espacio reservado original
-                        if (newBytes.Length <= totalAllowed)
-                        {
-                            Array.Clear(fileBytes, (int)sub.Offset, totalAllowed);
-                            Array.Copy(newBytes, 0, fileBytes, (int)sub.Offset, newBytes.Length);
-                            fileBytes[(int)sub.Offset + newBytes.Length] = 0x00;
-                        }
-                        else
-                        {
-                            // Si supera el tamaño, adaptamos de forma segura hasta el límite del bloque sin romper códigos adyacentes
-                            int safeLen = totalAllowed - 1;
-                            Array.Copy(newBytes, 0, fileBytes, (int)sub.Offset, safeLen);
-                            fileBytes[(int)sub.Offset + safeLen] = 0x00;
-                        }
-                    }
+                    int updatedOffset = offsetMapping[oldPointerVal];
+                    byte[] pointerBytes = BitConverter.GetBytes(updatedOffset);
+                    Array.Reverse(pointerBytes); // Formato Big-Endian para PS3
+                    Array.Copy(pointerBytes, 0, rebuiltBytes, p, 4);
+                }
+                else
+                {
+                    // Si el puntero original apuntaba a otra zona, lo copiamos tal cual
+                    Array.Copy(originalBytes, p, rebuiltBytes, p, 4);
                 }
             }
 
-            // Escritura atómica mediante archivo temporal para evitar bloqueos en Windows
+            // 4. Escritura atómica limpia mediante archivo temporal (.tmp)
             string tempPath = outputPath + ".tmp";
-            System.IO.File.WriteAllBytes(tempPath, fileBytes);
+            if (System.IO.File.Exists(tempPath))
+            {
+                System.IO.File.Delete(tempPath);
+            }
+
+            System.IO.File.WriteAllBytes(tempPath, rebuiltBytes);
 
             if (System.IO.File.Exists(outputPath))
             {
                 System.IO.File.Delete(outputPath);
             }
             System.IO.File.Move(tempPath, outputPath);
+        }
+
+        private int ReadInt32BigEndianAt(byte[] buffer, int index)
+        {
+            if (index + 4 > buffer.Length) return 0;
+            byte[] bytes = new byte[4];
+            Array.Copy(buffer, index, bytes, 0, 4);
+            Array.Reverse(bytes);
+            return BitConverter.ToInt32(bytes, 0);
         }
 
         private ushort ReadUInt16BigEndian(BinaryReader reader)
