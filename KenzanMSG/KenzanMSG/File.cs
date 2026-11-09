@@ -31,13 +31,11 @@ namespace KenzanMSG
                 if (fs.Length < 0x200) return result;
                 long length = fs.Length;
 
-                // Escaneo robusto con filtros estrictos para evitar cabeceras y textos cortados
                 for (long i = 0x18; i < length - 4; i++)
                 {
                     fs.Seek(i, SeekOrigin.Begin);
                     ushort possibleStrLen = ReadUInt16BigEndian(reader);
 
-                    // Longitud lógica esperada para un diálogo
                     if (possibleStrLen >= 2 && possibleStrLen < 1500)
                     {
                         if (i + 12 < length)
@@ -45,16 +43,12 @@ namespace KenzanMSG
                             fs.Seek(i + 4, SeekOrigin.Begin);
                             int strOffset = ReadInt32BigEndian(reader);
 
-                            // REGLA 1: El texto en los .msg de Yakuza siempre empieza pasado el offset 0x200 (fuera de la cabecera/cámaras)
-                            // REGLA 2: Evitamos duplicados ya registrados
                             if (strOffset >= 0x200 && strOffset < length && !result.Any(s => s.Offset == strOffset))
                             {
-                                // REGLA 3: Verificación estricta de que el offset apunta al inicio real de una cadena (el byte anterior debe ser 0x00)
                                 if (IsAValidStringStart(fs, strOffset))
                                 {
                                     string text = ReadNullTerminatedString(reader, strOffset, fs);
 
-                                    // REGLA 4: Validar que el texto sea legítimo y tenga una longitud coherente
                                     if (!string.IsNullOrEmpty(text) && text.Length >= 2 && IsValidText(text))
                                     {
                                         result.Add(new Subtitle
@@ -79,7 +73,6 @@ namespace KenzanMSG
         {
             try
             {
-                // Si el offset es el inicio absoluto de la zona de strings o está precedido por un byte nulo (0x00), es un inicio válido
                 if (offset <= 0x200) return false;
                 fs.Seek(offset - 1, SeekOrigin.Begin);
                 byte prevByte = (byte)fs.ReadByte();
@@ -119,9 +112,8 @@ namespace KenzanMSG
 
         private bool IsValidText(string text)
         {
-            // Descarta cadenas formadas por símbolos raros o basura pura
             int validChars = text.Count(c => char.IsLetterOrDigit(c) || char.IsPunctuation(c) || char.IsWhiteSpace(c));
-            return (double)validChars / text.Length > 0.6;
+            return (double)validChars / text.Length > 0.5;
         }
 
         public void RebuildWithSubtitles(string outputFolder, List<Subtitle> subtitles)
@@ -136,14 +128,11 @@ namespace KenzanMSG
                 return;
             }
 
-            // Leemos los bytes del archivo original de forma segura permitiendo lectura compartida
-            byte[] fileBytes;
-            using (var fs = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            {
-                fileBytes = new byte[fs.Length];
-                fs.Read(fileBytes, 0, (int)fs.Length);
-            }
+            // Copiamos el archivo original para preservar intactas la cabecera, cámaras y estructuras globales
+            System.IO.File.Copy(Path, outputPath, true);
+            byte[] fileBytes = System.IO.File.ReadAllBytes(outputPath);
 
+            // Reemplazo seguro string por string, actualizando longitud y rellenando con ceros estrictamente en su bloque
             foreach (var sub in subtitles)
             {
                 if (!string.IsNullOrEmpty(sub.Translation) && sub.Text != sub.Translation && sub.Offset >= 0x200 && sub.Offset < fileBytes.Length)
@@ -151,6 +140,7 @@ namespace KenzanMSG
                     byte[] oldBytes = FileEncoding.GetBytes(sub.Text);
                     byte[] newBytes = FileEncoding.GetBytes(sub.Translation);
 
+                    // Validamos que el texto original coincida en el offset
                     bool match = true;
                     if (sub.Offset + oldBytes.Length <= fileBytes.Length)
                     {
@@ -170,6 +160,7 @@ namespace KenzanMSG
 
                     if (match)
                     {
+                        // Medimos el espacio total asignado en este bloque hasta el siguiente nulo o etiqueta de control
                         int maxSpace = 0;
                         for (long i = sub.Offset; i < fileBytes.Length; i++)
                         {
@@ -178,6 +169,7 @@ namespace KenzanMSG
                         }
                         int totalAllowed = maxSpace + 1;
 
+                        // Si la traducción cabe dentro del espacio reservado original
                         if (newBytes.Length <= totalAllowed)
                         {
                             Array.Clear(fileBytes, (int)sub.Offset, totalAllowed);
@@ -186,6 +178,7 @@ namespace KenzanMSG
                         }
                         else
                         {
+                            // Si supera el tamaño, adaptamos de forma segura hasta el límite del bloque sin romper códigos adyacentes
                             int safeLen = totalAllowed - 1;
                             Array.Copy(newBytes, 0, fileBytes, (int)sub.Offset, safeLen);
                             fileBytes[(int)sub.Offset + safeLen] = 0x00;
@@ -194,7 +187,7 @@ namespace KenzanMSG
                 }
             }
 
-            // 💡 Escribimos primero en un archivo temporal (.tmp) y luego lo reemplazamos de forma atómica para evitar bloqueos de Windows
+            // Escritura atómica mediante archivo temporal para evitar bloqueos en Windows
             string tempPath = outputPath + ".tmp";
             System.IO.File.WriteAllBytes(tempPath, fileBytes);
 
@@ -204,7 +197,6 @@ namespace KenzanMSG
             }
             System.IO.File.Move(tempPath, outputPath);
         }
-        
 
         private ushort ReadUInt16BigEndian(BinaryReader reader)
         {
