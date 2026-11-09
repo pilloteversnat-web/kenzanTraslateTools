@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -61,7 +62,6 @@ namespace KenzanMSG
                             var txtOutputPath = Path.ChangeExtension(file, ".txt");
                             using var writer = new StreamWriter(txtOutputPath, false, Encoding.UTF8);
 
-                            // Llamada directa sin reflexión
                             var subtitles = msgFileObj.GetSubtitles();
 
                             if (subtitles != null)
@@ -129,7 +129,7 @@ namespace KenzanMSG
 
                             if (subtitles != null && subtitles.Count > 0)
                             {
-                                // 💡 Lectura secuencial por bloques del archivo TXT para evitar fallos de offset
+                                // Lectura secuencial por bloques del archivo TXT
                                 var fileLines = System.IO.File.ReadAllLines(txtFile, Encoding.UTF8);
                                 var translationsList = new List<string>();
                                 string currentTrans = "";
@@ -161,16 +161,16 @@ namespace KenzanMSG
                                     }
                                 }
 
-                                // Asignación directa 1 a 1 por índice (orden exacto de extracción)
+                                // Asignación directa 1 a 1 por índice ordenado
                                 int limit = Math.Min(subtitles.Count, translationsList.Count);
                                 for (int i = 0; i < limit; i++)
                                 {
                                     subtitles[i].Translation = translationsList[i].Replace("\\n", "\n");
                                 }
 
-                                // Forzamos la reconstrucción pasando la lista de subtítulos ya traducidos
+                                // Ejecutamos la reconstrucción limpia del MSG
                                 msgFileObj.RebuildWithSubtitles(_selectedFolderPath, subtitles);
-                                Log($"[IMPORTADO Y RECONSTRUIDO] {Path.GetFileName(correspondingMsg)} -> {limit} líneas aplicadas.");
+                                Log($"[IMPORTADO] {Path.GetFileName(correspondingMsg)} -> {limit} líneas aplicadas.");
                             }
                         }
                         catch (Exception ex)

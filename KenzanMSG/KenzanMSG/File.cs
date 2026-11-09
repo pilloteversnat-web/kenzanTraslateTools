@@ -20,6 +20,15 @@ namespace KenzanMSG
             ChangesFolder = changesFolder;
             FileEncoding = encoding;
         }
+        public class Subtitle
+        {
+            public long HeaderPosition { get; set; } // 💡 Añadimos esta propiedad que faltaba
+            public long Offset { get; set; }
+            public string Text { get; set; }
+            public string Translation { get; set; }
+            public bool Loaded { get; set; }
+        }
+
 
         public List<Subtitle> GetSubtitles()
         {
@@ -53,6 +62,7 @@ namespace KenzanMSG
                                     {
                                         result.Add(new Subtitle
                                         {
+                                            HeaderPosition = i,
                                             Offset = strOffset,
                                             Text = text,
                                             Translation = text,
@@ -135,33 +145,28 @@ namespace KenzanMSG
                 fs.Read(originalBytes, 0, (int)fs.Length);
             }
 
-            // 1. Localizamos dónde empiezan los datos de texto reales (por defecto a partir de 0x200 o buscando el primer offset mínimo)
             int dataStartOffset = 0x200;
-
-            // Copiamos la cabecera estructural intacta
             var newFileStream = new MemoryStream();
             newFileStream.Write(originalBytes, 0, dataStartOffset);
 
-            // Ordenamos los subtítulos por su aparición original
             var sortedSubtitles = subtitles.Where(s => s.Offset >= 0x200).OrderBy(s => s.Offset).ToList();
 
-            // Diccionario para mapear el offset viejo con el nuevo offset recalculado
-            var offsetMapping = new Dictionary<long, int>();
+            var headerUpdates = new Dictionary<long, (int newOffset, ushort newLength)>();
 
-            // 2. Escribimos cada texto traducido de forma consecutiva y guardamos su nueva posición
             foreach (var sub in sortedSubtitles)
             {
                 string textToUse = !string.IsNullOrEmpty(sub.Translation) ? sub.Translation : sub.Text;
                 byte[] textBytes = FileEncoding.GetBytes(textToUse);
 
                 int newOffset = (int)newFileStream.Position;
-                offsetMapping[sub.Offset] = newOffset;
+                ushort newLength = (ushort)(textBytes.Length + 1);
+
+                headerUpdates[sub.HeaderPosition] = (newOffset, newLength);
 
                 newFileStream.Write(textBytes, 0, textBytes.Length);
-                newFileStream.WriteByte(0x00); // Terminador nulo obligatorio entre cadenas
+                newFileStream.WriteByte(0x00);
             }
 
-            // Alineación múltiplo de 4 bytes al final del archivo (común en motores de PS3)
             while (newFileStream.Length % 4 != 0)
             {
                 newFileStream.WriteByte(0x00);
@@ -169,27 +174,30 @@ namespace KenzanMSG
 
             byte[] rebuiltBytes = newFileStream.ToArray();
 
-            // 3. Reconstruimos y actualizamos la tabla de punteros de la cabecera (Big-Endian)
-            for (long p = 0x18; p < dataStartOffset - 4; p += 4)
-            {
-                int oldPointerVal = ReadInt32BigEndianAt(originalBytes, (int)p);
+            // Copiamos la cabecera original estructural de forma segura
+            Array.Copy(originalBytes, 0, rebuiltBytes, 0, Math.Min(originalBytes.Length, dataStartOffset));
 
-                // Si este puntero apuntaba a uno de nuestros strings, lo actualizamos con su nueva dirección
-                if (offsetMapping.ContainsKey(oldPointerVal))
+            foreach (var kvp in headerUpdates)
+            {
+                long headerPos = kvp.Key;
+                int newOffset = kvp.Value.newOffset;
+                ushort newLen = kvp.Value.newLength;
+
+                // Validación de seguridad para no escribir fuera de rango en la cabecera
+                if (headerPos + 7 < rebuiltBytes.Length)
                 {
-                    int updatedOffset = offsetMapping[oldPointerVal];
-                    byte[] pointerBytes = BitConverter.GetBytes(updatedOffset);
-                    Array.Reverse(pointerBytes); // Formato Big-Endian para PS3
-                    Array.Copy(pointerBytes, 0, rebuiltBytes, p, 4);
-                }
-                else
-                {
-                    // Si el puntero original apuntaba a otra zona, lo copiamos tal cual
-                    Array.Copy(originalBytes, p, rebuiltBytes, p, 4);
+                    // Asignación directa Big-Endian de 2 bytes para la longitud
+                    rebuiltBytes[headerPos] = (byte)(newLen >> 8);
+                    rebuiltBytes[headerPos + 1] = (byte)(newLen & 0xFF);
+
+                    // Asignación directa Big-Endian de 4 bytes para el offset
+                    rebuiltBytes[headerPos + 4] = (byte)(newOffset >> 24);
+                    rebuiltBytes[headerPos + 5] = (byte)(newOffset >> 16);
+                    rebuiltBytes[headerPos + 6] = (byte)(newOffset >> 8);
+                    rebuiltBytes[headerPos + 7] = (byte)(newOffset & 0xFF);
                 }
             }
 
-            // 4. Escritura atómica limpia mediante archivo temporal (.tmp)
             string tempPath = outputPath + ".tmp";
             if (System.IO.File.Exists(tempPath))
             {
@@ -203,15 +211,6 @@ namespace KenzanMSG
                 System.IO.File.Delete(outputPath);
             }
             System.IO.File.Move(tempPath, outputPath);
-        }
-
-        private int ReadInt32BigEndianAt(byte[] buffer, int index)
-        {
-            if (index + 4 > buffer.Length) return 0;
-            byte[] bytes = new byte[4];
-            Array.Copy(buffer, index, bytes, 0, 4);
-            Array.Reverse(bytes);
-            return BitConverter.ToInt32(bytes, 0);
         }
 
         private ushort ReadUInt16BigEndian(BinaryReader reader)
