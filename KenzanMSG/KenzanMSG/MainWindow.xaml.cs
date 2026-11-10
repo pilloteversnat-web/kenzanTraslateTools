@@ -14,6 +14,13 @@ namespace KenzanMSG
     {
         private string _selectedFolderPath = string.Empty;
 
+        // Nombres de hablantes que aparecen en la tabla final del MSG (se muestran como nombre del personaje).
+        // Agrega aqui los que aparezcan en otros archivos. Las etiquetas internas (Talk_Yes, etc.) NO se traducen.
+        private static readonly Dictionary<string, string> TailNameTranslations = new()
+        {
+            ["Pawn Shop Owner"] = "Prestamista"
+        };
+
         public MainWindow()
         {
             InitializeComponent();
@@ -59,10 +66,10 @@ namespace KenzanMSG
                         {
                             var msgFileObj = new KenzanMSG.File("Kenzan", file, string.Empty, Encoding.GetEncoding(932));
 
+                            var subtitles = msgFileObj.GetSubtitles();
+
                             var txtOutputPath = Path.ChangeExtension(file, ".txt");
                             using var writer = new StreamWriter(txtOutputPath, false, Encoding.UTF8);
-
-                            var subtitles = msgFileObj.GetSubtitles();
 
                             if (subtitles != null)
                             {
@@ -161,6 +168,12 @@ namespace KenzanMSG
                                     }
                                 }
 
+                                if (translationsList.Count != subtitles.Count)
+                                {
+                                    Log($"[AVISO] {Path.GetFileName(txtFile)}: el MSG tiene {subtitles.Count} mensajes y el TXT {translationsList.Count} bloques. " +
+                                        "Revisa que no falte ningún '# Offset:' o '---'.");
+                                }
+
                                 // Asignación directa 1 a 1 por índice ordenado
                                 int limit = Math.Min(subtitles.Count, translationsList.Count);
                                 for (int i = 0; i < limit; i++)
@@ -169,7 +182,7 @@ namespace KenzanMSG
                                 }
 
                                 // Ejecutamos la reconstrucción limpia del MSG
-                                msgFileObj.RebuildWithSubtitles(_selectedFolderPath, subtitles);
+                                msgFileObj.RebuildWithSubtitles(_selectedFolderPath, subtitles, TailNameTranslations);
                                 Log($"[IMPORTADO] {Path.GetFileName(correspondingMsg)} -> {limit} líneas aplicadas.");
                             }
                         }
